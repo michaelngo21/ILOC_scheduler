@@ -56,6 +56,7 @@ class Operand:
         self.vr = vr
         self.pr = pr
         self.nu = nu
+        self.isConstant = False
 
     def printSR(self):
         if not self.isConstant:

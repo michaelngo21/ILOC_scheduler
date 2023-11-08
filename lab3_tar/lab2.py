@@ -270,8 +270,9 @@ def allocate(dummy: lab1.IR_Node, k: int, maxVR: int, maxLive: int):
 
 def main():
     argc = len(sys.argv)
-    xFlag = False
-    mFlag = False
+    xFlag = False   # print renamed list
+    mFlag = False   # print maxLive value
+    # aFlag = False   # perform register allocation
     k = 32  # default value = 32
 
     if argc < 2 or argc > 4:
@@ -301,6 +302,8 @@ def main():
                 xFlag = True
             elif sys.argv[3] == "-m":
                 mFlag = True
+            # elif sys.argv[3] == "-a":
+            #     aFlag = True
             else:
                 print(f"ERROR: Command line argument \'{sys.argv[3]}\' not recognized.", file=sys.stderr)
                 print(helpMessage)
@@ -322,13 +325,15 @@ def main():
     if mFlag:
         print("//maxLive:", maxLive)
 
+    # if aFlag:
     # ALLOCATOR ALGORITHM
     allocate(dummy, k, maxVR, maxLive)
 
-    currnode = dummy.next
-    while currnode != dummy:
-        print(currnode.printWithPRClean())
-        currnode = currnode.next
+    # Uncomment to print allocated product
+    # currnode = dummy.next
+    # while currnode != dummy:
+    #     print(currnode.printWithPRClean())
+    #     currnode = currnode.next
 
     
 if __name__ == "__main__": # if called by the command line, execute main()
