@@ -59,9 +59,9 @@ def create_dependence_graph(dummy: lab1.IR_Node):
         # if curr.opcode == lab1.STORE_LEX:
         #     print(f"{lab1.LEXEMES[curr.opcode]}\t{curr.op1.printSR()}, {curr.op2.printSR()}, {curr.op3.printSR()}")
 
-        last_store_idx = len(prev_stores) - 1
-        last_output_idx = len(prev_outputs) - 1
-        last_load_idx = len(prev_loads) - 1
+        # last_store_idx = len(prev_stores) - 1
+        # last_output_idx = len(prev_outputs) - 1
+        # last_load_idx = len(prev_loads) - 1
 
         data_edge_nodes = []
         # set edges for each of this node's uses to their definition locations
@@ -77,7 +77,7 @@ def create_dependence_graph(dummy: lab1.IR_Node):
                 continue
             # add DATA edge
             node.add_edge(def_location[o.vr], DATA, o.vr)
-            # data_edge_nodes.append(def_location[o.vr])
+            data_edge_nodes.append(def_location[o.vr])
             
         # sort data_edge_nodes to help with updating last_store, last_output, and last_load
         # print(f"data_edge_nodes before sort: {[node.lineno for node in data_edge_nodes]}")
@@ -89,8 +89,14 @@ def create_dependence_graph(dummy: lab1.IR_Node):
         # while len(prev_stores) > last_store_idx and data_edge_node[] == prev_stores[last_store_idx]:
         #     last_store_idx -= 1
         nondata_prev_stores = [node for node in prev_stores if node not in data_edge_nodes]
+        if len(nondata_prev_stores) != len(prev_stores):
+            print("data store removed!")
         nondata_prev_loads = [node for node in prev_loads if node not in data_edge_nodes]
+        if len(nondata_prev_loads) != len(prev_loads):
+            print("data load removed!")
         nondata_prev_outputs = [node for node in prev_outputs if node not in data_edge_nodes]
+        if len(nondata_prev_outputs) != len(prev_outputs):
+            print("data output removed!")
 
         # set up a list comprehension containing just the GraphNodes at the end of edges to use "in" operation
         # edge_nodes = [edge[0] for edge in node.edges]
