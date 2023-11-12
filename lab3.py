@@ -41,9 +41,9 @@ class GraphNode:
 def create_dependence_graph(dummy: lab1.IR_Node):
     def_location = {}
     nodes_arr = []
-    last_store = None
-    last_output = None
-    last_load = None
+    prev_stores = []
+    prev_outputs = []
+    prev_loads = []
 
     curr = dummy.next
     while curr != dummy:
@@ -59,7 +59,11 @@ def create_dependence_graph(dummy: lab1.IR_Node):
         # if curr.opcode == lab1.STORE_LEX:
         #     print(f"{lab1.LEXEMES[curr.opcode]}\t{curr.op1.printSR()}, {curr.op2.printSR()}, {curr.op3.printSR()}")
 
+        last_store_idx = len(prev_stores) - 1
+        last_output_idx = len(prev_outputs) - 1
+        last_load_idx = len(prev_loads) - 1
 
+        data_edge_nodes = []
         # set edges for each of this node's uses to their definition locations
         for i in range(1, 3):
             if i == 1:
@@ -71,38 +75,59 @@ def create_dependence_graph(dummy: lab1.IR_Node):
             if o.isConstant:
                 o.vr = o.sr # o.vr is set to o.sr. This may be inefficient, not sure.
                 continue
+            # add DATA edge
             node.add_edge(def_location[o.vr], DATA, o.vr)
+            # data_edge_nodes.append(def_location[o.vr])
+            
+        # sort data_edge_nodes to help with updating last_store, last_output, and last_load
+        # print(f"data_edge_nodes before sort: {[node.lineno for node in data_edge_nodes]}")
+        # data_edge_nodes.sort(key=node.ir_node.lineno, reverse=True)
+        # print(f"data_edge_nodes after sort: {[node.lineno for node in data_edge_nodes]}")
+
+        # update last_store, last_output, and load_load to be the most recent NON-DATA node
+        # if len(prev_stores) > last_store_idx and data_edge_nodes[-1] 
+        # while len(prev_stores) > last_store_idx and data_edge_node[] == prev_stores[last_store_idx]:
+        #     last_store_idx -= 1
+        nondata_prev_stores = [node for node in prev_stores if node not in data_edge_nodes]
+        nondata_prev_loads = [node for node in prev_loads if node not in data_edge_nodes]
+        nondata_prev_outputs = [node for node in prev_outputs if node not in data_edge_nodes]
 
         # set up a list comprehension containing just the GraphNodes at the end of edges to use "in" operation
-        edge_nodes = [edge[0] for edge in node.edges]
+        # edge_nodes = [edge[0] for edge in node.edges]
 
         # if o is a load, store, or output, add serial and conflict edges to other memory ops
         if curr.opcode == lab1.LOAD_LEX:                    # load needs conflict edge to most recent store
-            if last_store != None and last_store not in edge_nodes: # add extra check to confirm there isn't already a DATA edge to that node
-                node.add_edge(last_store, CONFLICT)  
-            last_load = node
+            if nondata_prev_stores: # add extra check to confirm there isn't already a DATA edge to that node
+                node.add_edge(nondata_prev_stores[-1], CONFLICT)  
+            prev_loads.append(node)
+            if len(prev_loads) > 3:
+                prev_loads.pop(0)
         elif curr.opcode == lab1.OUTPUT_LEX:                # output needs conflict edge to recent store + serialization edge to recent output
-            if last_store != None and last_store not in edge_nodes:
-                node.add_edge(last_store, CONFLICT)
-            if last_output != None and last_output not in edge_nodes:
-                node.add_edge(last_output, SERIALIZATION)
-            last_output = node
+            if nondata_prev_stores:
+                node.add_edge(nondata_prev_stores[-1], CONFLICT)
+            if nondata_prev_outputs:
+                node.add_edge(nondata_prev_outputs[-1], SERIALIZATION)
+            prev_outputs.append(node)
+            if len(prev_outputs) > 3:
+                prev_outputs.pop(0)
         elif curr.opcode == lab1.STORE_LEX:                 # store needs serialization edge to most recent store, load, & output
-            print(f"entered store for curr={curr.lineno}: last_load={last_load.ir_node.lineno}")
-            if last_load != None and last_load not in edge_nodes:
+            # print(f"entered store for curr={curr.lineno}: last_load={prev_loads.ir_node.lineno}")
+            if nondata_prev_loads:
                 # temp code
-                print(f"adding serialization edge from {node.ir_node.lineno} to {last_load.ir_node.lineno}")
-                print(f"node's edges:")
-                for edge in node.edges:
-                    print(edge[0].ir_node.lineno)
-                print(f"last_load({last_load.ir_node.lineno}) in node.edges = {last_load in node.edges}")
+                # print(f"adding serialization edge from {node.ir_node.lineno} to {prev_loads.ir_node.lineno}")
+                # print(f"node's edges:")
+                # for edge in node.edges:
+                #     print(edge[0].ir_node.lineno)
+                # print(f"last_load({prev_loads.ir_node.lineno}) in node.edges = {prev_loads in node.edges}")
                 # temp code
-                node.add_edge(last_load, SERIALIZATION)
-            if last_output != None and last_output not in edge_nodes:
-                node.add_edge(last_output, SERIALIZATION)
-            if last_store != None and last_store not in edge_nodes:
-                node.add_edge(last_store, SERIALIZATION)
-            last_store = node
+                node.add_edge(nondata_prev_loads[-1], SERIALIZATION)
+            if nondata_prev_outputs:
+                node.add_edge(nondata_prev_outputs[-1], SERIALIZATION)
+            if nondata_prev_stores:
+                node.add_edge(nondata_prev_stores[-1], SERIALIZATION)
+            prev_stores.append(node)
+            if len(prev_stores) > 3:
+                prev_stores.pop(0)
         
         curr = curr.next
     
