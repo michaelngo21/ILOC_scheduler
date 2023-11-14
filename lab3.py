@@ -38,12 +38,23 @@ RSHIFT_LATENCY = 1
 OUTPUT_LATENCY = 1
 NOP_LATENCY = 1
 
+LEX_TO_LATENCY = (LOAD_LATENCY, STORE_LATENCY, LOADI_LATENCY, ADD_LATENCY, SUB_LATENCY, MULT_LATENCY, LSHIFT_LATENCY,
+            RSHIFT_LATENCY, OUTPUT_LATENCY, NOP_LATENCY)
+
+FUNC0_ALLOWED = {lab1.LOAD_LEX, lab1.STORE_LEX, lab1.OUTPUT_LEX, lab1.LOADI_LEX, lab1.ADD_LEX, lab1.SUB_LEX, lab1.LSHIFT_LEX, lab1.RSHIFT_LEX, lab1.NOP_LEX}
+FUNC1_ALLOWED = {lab1.MULT_LEX, lab1.OUTPUT_LEX, lab1.LOADI_LEX, lab1.ADD_LEX, lab1.SUB_LEX, lab1.LSHIFT_LEX, lab1.RSHIFT_LEX, lab1.NOP_LEX}
+
+NOT_READY, READY, ACTIVE, RETIRED = 1, 2, 3, 4
+
+
 class GraphNode:
     def __init__(self, ir_node: lab1.IR_Node):
         self.ir_node =  ir_node   # represents IR_Node
         self.out_edges = [] # note: edges will be tuples: (<destination GraphNode>, <edge type (int)> ) NOTE: there will be an optional 3rd element in tuple to store vr for DATA edges
         self.in_edges = []
         self.prio = 0
+        self.status = NOT_READY # status values are 1: not ready, 2: ready, 3: active, 4: retired
+        self.cycleToRetire = 0
         # potentially have a field for self.in (in-edges)
     def add_edge(self, dest, edge_type: int, data_vr=-1):
         if data_vr == -1:
@@ -169,27 +180,7 @@ def assign_priorities(nodes_arr, root_set):
         for node in nodes_arr:
             for edge in node.out_edges:
                 child = edge[0]
-                child_prio = 0
-                if child.ir_node.opcode == lab1.LOAD_LEX:
-                    child_prio += LOAD_LATENCY
-                elif child.ir_node.opcode == lab1.LOADI_LEX:
-                    child_prio += LOADI_LATENCY
-                elif child.ir_node.opcode == lab1.STORE_LEX:
-                    child_prio += STORE_LATENCY
-                elif child.ir_node.opcode == lab1.ADD_LEX:
-                    child_prio += ADD_LATENCY
-                elif child.ir_node.opcode == lab1.SUB_LEX:
-                    child_prio += SUB_LATENCY
-                elif child.ir_node.opcode == lab1.MULT_LEX:
-                    child_prio += MULT_LATENCY
-                elif child.ir_node.opcode == lab1.LSHIFT_LEX:
-                    child_prio += LSHIFT_LATENCY
-                elif child.ir_node.opcode == lab1.RSHIFT_LEX:
-                    child_prio += RSHIFT_LATENCY
-                elif child.ir_node.opcode == lab1.OUTPUT_LEX:
-                    child_prio += OUTPUT_LATENCY
-                elif child.ir_node.opcode == lab1.NOP_LEX:
-                    child_prio += NOP_LATENCY
+                child_prio = LEX_TO_LATENCY[child.ir_node.opcode]
 
                 child_prio *= 10    # Multiply latency weight by 10
                 child_prio += 1     # Account for 1 more descendant along this path
@@ -201,6 +192,106 @@ def assign_priorities(nodes_arr, root_set):
         if reached_fixed_point:
             break
         print(f"num_while_iterations {num_while_iterations}")
+
+# helper function for inserting node into a list of nodes that's currently sorted in descending order of priorities
+def insertNode(ready, node):
+    for i in range(len(ready)):
+        if node.prio > ready[i]:
+            ready.insert(i, node)
+            return
+    ready.append(node)
+
+def printInstruction(node1, node2):
+    print(f"{node1.ir_node.printWithVRClean()}; {node2.ir_node.printWithVRClean()}")
+
+def schedule(root_set):
+    nop_graph_node = GraphNode(lab1.IR_Node.createNOP())  # singleton NOP graph node
+    cycle = 1
+    for root in root_set: # Insert each root into ready set
+        root.status = READY
+    ready = list(root_set)    # Potential optimizatino: may want to replace with maxheap 
+    ready.sort(key=(lambda root: root.prio), reverse=True)
+    active = set()
+
+    while len(ready) > 0 or len(active) > 0:
+        # pick an operation for each functional unit
+        node1 = nop_graph_node
+        node2 = nop_graph_node
+        if len(ready) >= 1:
+            node1_idx = 0
+            node1 = ready[node1_idx]
+            while node1.ir_node.opcode not in FUNC0_ALLOWED:
+                node1_idx += 1
+                if node1_idx >= len(ready):
+                    node1 = nop_graph_node
+                    break
+                node1 = ready[node1_idx]
+            if node1.ir_node.opcode != nop_graph_node:
+                ready.pop(node1_idx)
+
+        extra_restrictions = set()  # use extra_restrictions to guarantee that if node1 is output, node2 isn't
+        if node1.ir_node.opcode == lab1.OUTPUT_LEX:
+            extra_restrictions.add(lab1.OUTPUT_LEX)
+        if len(ready) >= 1:
+            node2_idx = 0
+            node2 = ready[node2_idx]
+            while node2.ir_node.opcode not in FUNC1_ALLOWED and node2.ir_node.opcode not in extra_restrictions:
+                node2_idx += 1
+                if node2_idx >= len(ready):
+                    node2 = nop_graph_node
+                    break
+                node2 = ready[node2_idx]
+            if node2.ir_node.opcode != nop_graph_node:
+                ready.pop(node2_idx)
+        
+        # move them from ready to active
+        node1.cycleToRetire = cycle + LEX_TO_LATENCY[node1.ir_node.opcode]
+        node1.status = ACTIVE
+        node2.cycleToRetire = cycle + LEX_TO_LATENCY[node2.ir_node.opcode]
+        node2.status = ACTIVE
+        active.add(node1)
+        active.add(node2)
+
+        # Print Instruction
+        printInstruction(node1, node2)
+
+        cycle += 1
+
+        # find each op o in Active that retires
+        retire_set = set()
+        for node in active:
+            if node.cycleToRetire == cycle:
+                retire_set.add(node)
+                node.status = RETIRED
+                # add children of retired node to Ready
+                for edge in node.out_edges:
+                    child = edge[0]
+                    # TODO: look into this some more
+                    print(f"child.in_edges: {child.in_edges}")
+                    for in_edge_idx in range(len(child.in_edges)):
+                        if node == child.in_edges[in_edge_idx][0]:  # ensure that node is still in in_edges before removing to avoid exception
+                            print(f"node found in in_edges")
+                            child.in_edges.pop(in_edge_idx)
+                    if len(child.in_edges) == 0:
+                        child.status = READY
+                        insertNode(ready, child)
+        print("len(retire_set):", len(retire_set))
+        # remove retired nodes from Active
+        for node in retire_set:
+            active.remove(node)
+        
+        # for each multi-cycle operation in Active, check ops that depend on o for early releases
+        for node in active:
+            for edge in node.out_edges:
+                child = edge[0]
+                if edge[1] == SERIALIZATION:
+                    child.in_edges.remove(node)
+                    if len(child.in_edges) == 0:
+                        child.status = READY
+                        insertNode(ready, child)
+                # don't think we have to account for CONFLICT because you still have to wait until parent retires
+        print("len(ready):", len(ready))
+        
 
 def write_graphviz(nodes_arr):
     filename = "out.dot"
@@ -265,6 +356,9 @@ def main():
 
     # Construct .dot file for graphviz
     write_graphviz(nodes_arr)
+
+    # SCHEDULE
+    schedule(root_set)
 
 if __name__ == "__main__": # if called by the command line, execute parse()
     main()

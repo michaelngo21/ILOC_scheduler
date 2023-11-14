@@ -126,6 +126,10 @@ class IR_Node:
         if self.opcode == LOADI_LEX or self.opcode == OUTPUT_LEX:
             self.op1.isConstant = True
 
+    @staticmethod
+    def createNOP():
+        return IR_Node(-1, NOP_LEX, -1, -1, -1)
+
     def printWithSR(self):
         return f"{LEXEMES[self.opcode]}\t{self.op1.printSR()}, {self.op2.printSR()}, {self.op3.printSR()}"
     
