@@ -27,16 +27,31 @@ Syntax: ./schedule [options] filename
 EDGE_TYPES = ["Data", "Serialization", "Conflict"]
 DATA, SERIALIZATION, CONFLICT = 0, 1, 2
 
+LOAD_LATENCY = 5
+LOADI_LATENCY = 1
+STORE_LATENCY = 5
+ADD_LATENCY = 1
+SUB_LATENCY = 1
+MULT_LATENCY = 3
+LSHIFT_LATENCY = 1
+RSHIFT_LATENCY = 1
+OUTPUT_LATENCY = 1
+NOP_LATENCY = 1
+
 class GraphNode:
     def __init__(self, ir_node: lab1.IR_Node):
         self.ir_node =  ir_node   # represents IR_Node
-        self.edges = [] # note: edges will be tuples: (<destination GraphNode>, <edge type (int)> ) NOTE: there will be an optional 3rd element in tuple to store vr for DATA edges
+        self.out_edges = [] # note: edges will be tuples: (<destination GraphNode>, <edge type (int)> ) NOTE: there will be an optional 3rd element in tuple to store vr for DATA edges
+        self.in_edges = []
+        self.prio = 0
         # potentially have a field for self.in (in-edges)
     def add_edge(self, dest, edge_type: int, data_vr=-1):
         if data_vr == -1:
-            self.edges.append((dest, edge_type))
+            self.out_edges.append((dest, edge_type))
+            dest.in_edges.append((self, edge_type))
         else:
-            self.edges.append((dest, edge_type, data_vr))
+            self.out_edges.append((dest, edge_type, data_vr))
+            dest.in_edges.append((self, edge_type, data_vr))
 
 def create_dependence_graph(dummy: lab1.IR_Node):
     def_location = {}
@@ -139,6 +154,53 @@ def create_dependence_graph(dummy: lab1.IR_Node):
     
     return nodes_arr
     
+def get_roots(nodes_arr):
+    root_set = set()
+    for node in nodes_arr:
+        if len(node.in_edges) == 0:
+            root_set.add(node)
+    return root_set
+
+def assign_priorities(nodes_arr, root_set):
+    for root in root_set:
+        assign_priorities_helper(root)
+
+def assign_priorities_helper(curr):
+    for edge in curr.out_edges:
+        child = edge[0]
+        child_prio = 0
+        if child.ir_node.opcode == lab1.LOAD_LEX:
+            child_prio += LOAD_LATENCY
+        elif child.ir_node.opcode == lab1.LOADI_LEX:
+            child_prio += LOADI_LATENCY
+        elif child.ir_node.opcode == lab1.STORE_LEX:
+            child_prio += STORE_LATENCY
+        elif child.ir_node.opcode == lab1.ADD_LEX:
+            child_prio += ADD_LATENCY
+        elif child.ir_node.opcode == lab1.SUB_LEX:
+            child_prio += SUB_LATENCY
+        elif child.ir_node.opcode == lab1.MULT_LEX:
+            child_prio += MULT_LATENCY
+        elif child.ir_node.opcode == lab1.LSHIFT_LEX:
+            child_prio += LSHIFT_LATENCY
+        elif child.ir_node.opcode == lab1.RSHIFT_LEX:
+            child_prio += RSHIFT_LATENCY
+        elif child.ir_node.opcode == lab1.OUTPUT_LEX:
+            child_prio += OUTPUT_LATENCY
+        elif child.ir_node.opcode == lab1.NOP_LEX:
+            child_prio += NOP_LATENCY
+
+        child_prio *= 10    # Multiply latency weight by 10
+        child_prio += len(child.out_edges)  # Add number of descendants
+        child_prio += curr.prio # Add parent weight
+
+        if child_prio > child.prio:
+            child.prio = child_prio
+            assign_priorities_helper(child)
+            return True
+        else:
+            False
+
 def write_graphviz(nodes_arr):
     filename = "out.dot"
     try:
@@ -146,11 +208,11 @@ def write_graphviz(nodes_arr):
             file.write("digraph testcase1\n{\n")
 
             for node in nodes_arr:
-                file.write(f"{node.ir_node.lineno} [label=\"{node.ir_node.lineno}: {node.ir_node.printWithVRClean()} \"];\n")
+                file.write(f"{node.ir_node.lineno} [label=\"{node.ir_node.lineno}: {node.ir_node.printWithVRClean()} \n prio: {node.prio}\"];\n")
 
             for node in nodes_arr:
                 tail = node.ir_node.lineno
-                for edge in node.edges:
+                for edge in node.out_edges:
                     head = edge[0].ir_node.lineno  # recall that edge is formatted as (dest GraphNode, edge_type int)
                     edge_type = EDGE_TYPES[edge[1]]
                     edge_vr_string = "" # for data edges, there will be a 3rd element in edge which represents the vr
@@ -193,7 +255,14 @@ def main():
 
     # CREATE DEPENDENCE GRAPH
     nodes_arr = create_dependence_graph(dummy)
+
+    # Get roots
+    root_set = get_roots(nodes_arr)
     
+    # ASSIGN PRIORITIES
+    assign_priorities(nodes_arr, root_set)
+
+    # Construct .dot file for graphviz
     write_graphviz(nodes_arr)
 
 if __name__ == "__main__": # if called by the command line, execute parse()
