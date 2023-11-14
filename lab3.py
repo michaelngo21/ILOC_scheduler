@@ -162,44 +162,45 @@ def get_roots(nodes_arr):
     return root_set
 
 def assign_priorities(nodes_arr, root_set):
-    for root in root_set:
-        assign_priorities_helper(root)
+    num_while_iterations = 0
+    while True:
+        num_while_iterations += 1
+        reached_fixed_point = True
+        for node in nodes_arr:
+            for edge in node.out_edges:
+                child = edge[0]
+                child_prio = 0
+                if child.ir_node.opcode == lab1.LOAD_LEX:
+                    child_prio += LOAD_LATENCY
+                elif child.ir_node.opcode == lab1.LOADI_LEX:
+                    child_prio += LOADI_LATENCY
+                elif child.ir_node.opcode == lab1.STORE_LEX:
+                    child_prio += STORE_LATENCY
+                elif child.ir_node.opcode == lab1.ADD_LEX:
+                    child_prio += ADD_LATENCY
+                elif child.ir_node.opcode == lab1.SUB_LEX:
+                    child_prio += SUB_LATENCY
+                elif child.ir_node.opcode == lab1.MULT_LEX:
+                    child_prio += MULT_LATENCY
+                elif child.ir_node.opcode == lab1.LSHIFT_LEX:
+                    child_prio += LSHIFT_LATENCY
+                elif child.ir_node.opcode == lab1.RSHIFT_LEX:
+                    child_prio += RSHIFT_LATENCY
+                elif child.ir_node.opcode == lab1.OUTPUT_LEX:
+                    child_prio += OUTPUT_LATENCY
+                elif child.ir_node.opcode == lab1.NOP_LEX:
+                    child_prio += NOP_LATENCY
 
-def assign_priorities_helper(curr):
-    for edge in curr.out_edges:
-        child = edge[0]
-        child_prio = 0
-        if child.ir_node.opcode == lab1.LOAD_LEX:
-            child_prio += LOAD_LATENCY
-        elif child.ir_node.opcode == lab1.LOADI_LEX:
-            child_prio += LOADI_LATENCY
-        elif child.ir_node.opcode == lab1.STORE_LEX:
-            child_prio += STORE_LATENCY
-        elif child.ir_node.opcode == lab1.ADD_LEX:
-            child_prio += ADD_LATENCY
-        elif child.ir_node.opcode == lab1.SUB_LEX:
-            child_prio += SUB_LATENCY
-        elif child.ir_node.opcode == lab1.MULT_LEX:
-            child_prio += MULT_LATENCY
-        elif child.ir_node.opcode == lab1.LSHIFT_LEX:
-            child_prio += LSHIFT_LATENCY
-        elif child.ir_node.opcode == lab1.RSHIFT_LEX:
-            child_prio += RSHIFT_LATENCY
-        elif child.ir_node.opcode == lab1.OUTPUT_LEX:
-            child_prio += OUTPUT_LATENCY
-        elif child.ir_node.opcode == lab1.NOP_LEX:
-            child_prio += NOP_LATENCY
+                child_prio *= 10    # Multiply latency weight by 10
+                child_prio += 1     # Account for 1 more descendant along this path
+                child_prio += node.prio # Add parent weight
 
-        child_prio *= 10    # Multiply latency weight by 10
-        child_prio += len(child.out_edges)  # Add number of descendants
-        child_prio += curr.prio # Add parent weight
-
-        if child_prio > child.prio:
-            child.prio = child_prio
-            assign_priorities_helper(child)
-            return True
-        else:
-            False
+                if child_prio > child.prio:
+                    child.prio = child_prio
+                    reached_fixed_point = False
+        if reached_fixed_point:
+            break
+        print(f"num_while_iterations {num_while_iterations}")
 
 def write_graphviz(nodes_arr):
     filename = "out.dot"
