@@ -116,13 +116,13 @@ def create_dependence_graph(dummy: lab1.IR_Node):
         #     last_store_idx -= 1
         nondata_prev_stores = [node for node in prev_stores if node not in data_edge_nodes]
         if len(nondata_prev_stores) != len(prev_stores):
-            print("data store removed!")
+            print("//data store removed!")
         nondata_prev_loads = [node for node in prev_loads if node not in data_edge_nodes]
         if len(nondata_prev_loads) != len(prev_loads):
-            print("data load removed!")
+            print("//data load removed!")
         nondata_prev_outputs = [node for node in prev_outputs if node not in data_edge_nodes]
         if len(nondata_prev_outputs) != len(prev_outputs):
-            print("data output removed!")
+            print("//data output removed!")
 
         # set up a list comprehension containing just the GraphNodes at the end of edges to use "in" operation
         # edge_nodes = [edge[0] for edge in node.edges]
@@ -165,17 +165,20 @@ def create_dependence_graph(dummy: lab1.IR_Node):
     
     return nodes_arr
     
-def get_roots(nodes_arr):
+def get_roots_and_leaves(nodes_arr):
     root_set = set()
+    leaf_set = set()
     for node in nodes_arr:
         if len(node.in_edges) == 0:
             root_set.add(node)
-    return root_set
+        elif len(node.out_edges) == 0:
+            leaf_set.add(node)
+    return root_set, leaf_set
 
 def assign_priorities(nodes_arr, root_set):
-    num_while_iterations = 0
+    # num_while_iterations = 0
     while True:
-        num_while_iterations += 1
+        # num_while_iterations += 1
         reached_fixed_point = True
         for node in nodes_arr:
             for edge in node.out_edges:
@@ -191,25 +194,25 @@ def assign_priorities(nodes_arr, root_set):
                     reached_fixed_point = False
         if reached_fixed_point:
             break
-        print(f"num_while_iterations {num_while_iterations}")
+        # print(f"num_while_iterations {num_while_iterations}")
 
 # helper function for inserting node into a list of nodes that's currently sorted in descending order of priorities
 def insertNode(ready, node):
     for i in range(len(ready)):
-        if node.prio > ready[i]:
+        if node.prio > ready[i].prio:
             ready.insert(i, node)
             return
     ready.append(node)
 
 def printInstruction(node1, node2):
-    print(f"{node1.ir_node.printWithVRClean()}; {node2.ir_node.printWithVRClean()}")
+    print(f"[{node1.ir_node.printWithVRClean()}; {node2.ir_node.printWithVRClean()}]")
 
-def schedule(root_set):
+def schedule(leaf_set):
     nop_graph_node = GraphNode(lab1.IR_Node.createNOP())  # singleton NOP graph node
     cycle = 1
-    for root in root_set: # Insert each root into ready set
-        root.status = READY
-    ready = list(root_set)    # Potential optimizatino: may want to replace with maxheap 
+    for leaf in leaf_set: # Insert each root into ready set
+        leaf.status = READY
+    ready = list(leaf_set)    # Potential optimizatino: may want to replace with maxheap 
     ready.sort(key=(lambda root: root.prio), reverse=True)
     active = set()
 
@@ -223,10 +226,11 @@ def schedule(root_set):
             while node1.ir_node.opcode not in FUNC0_ALLOWED:
                 node1_idx += 1
                 if node1_idx >= len(ready):
+                    # print("entered base case about to break")
                     node1 = nop_graph_node
                     break
                 node1 = ready[node1_idx]
-            if node1.ir_node.opcode != nop_graph_node:
+            if node1 != nop_graph_node:
                 ready.pop(node1_idx)
 
         extra_restrictions = set()  # use extra_restrictions to guarantee that if node1 is output, node2 isn't
@@ -241,7 +245,7 @@ def schedule(root_set):
                     node2 = nop_graph_node
                     break
                 node2 = ready[node2_idx]
-            if node2.ir_node.opcode != nop_graph_node:
+            if node2 != nop_graph_node:
                 ready.pop(node2_idx)
         
         # move them from ready to active
@@ -263,34 +267,47 @@ def schedule(root_set):
             if node.cycleToRetire == cycle:
                 retire_set.add(node)
                 node.status = RETIRED
-                # add children of retired node to Ready
-                for edge in node.out_edges:
-                    child = edge[0]
+                # add parents of retired node to Ready
+                for edge in node.in_edges:
+                    parent = edge[0]
                     # TODO: look into this some more
-                    print(f"child.in_edges: {child.in_edges}")
-                    for in_edge_idx in range(len(child.in_edges)):
-                        if node == child.in_edges[in_edge_idx][0]:  # ensure that node is still in in_edges before removing to avoid exception
-                            print(f"node found in in_edges")
-                            child.in_edges.pop(in_edge_idx)
-                    if len(child.in_edges) == 0:
-                        child.status = READY
-                        insertNode(ready, child)
-        print("len(retire_set):", len(retire_set))
+                    # print(f"child.out_edges: {child.out_edges}")
+
+                    # ensure that node is still in out_edges before removing to avoid exception
+                    for out_edge_idx in range(len(parent.out_edges)):
+                        if node == parent.out_edges[out_edge_idx][0]: 
+                            # print(f"node found in out_edges")
+                            parent.out_edges.pop(out_edge_idx)
+                            break
+
+                    # insert the node into ready list (while maintaining ordering)
+                    if len(parent.out_edges) == 0:
+                        parent.status = READY
+                        insertNode(ready, parent)
+        # print("len(retire_set):", len(retire_set))
         # remove retired nodes from Active
         for node in retire_set:
             active.remove(node)
         
         # for each multi-cycle operation in Active, check ops that depend on o for early releases
         for node in active:
-            for edge in node.out_edges:
-                child = edge[0]
+            for edge in node.in_edges:
+                parent = edge[0]
                 if edge[1] == SERIALIZATION:
-                    child.in_edges.remove(node)
-                    if len(child.in_edges) == 0:
-                        child.status = READY
-                        insertNode(ready, child)
+                    # print(f"parent.out_edges: {parent.out_edges}")
+
+                    # ensure that node is still in out_edges before removing to avoid exception
+                    for out_edge_idx in range(len(parent.out_edges)):
+                        if node == parent.out_edges[out_edge_idx][0]: 
+                            # print(f"node found in out_edges")
+                            parent.out_edges.pop(out_edge_idx)
+                            break
+
+                    if len(parent.out_edges) == 0:
+                        parent.status = READY
+                        insertNode(ready, parent)
                 # don't think we have to account for CONFLICT because you still have to wait until parent retires
-        print("len(ready):", len(ready))
+        # print("len(ready):", len(ready))
         
 
 def write_graphviz(nodes_arr):
@@ -320,7 +337,6 @@ def write_graphviz(nodes_arr):
 
 
 def main():
-    print("entered main")
     # HANDLE COMMAND LINE
     argc = len(sys.argv)
     filename = ""
@@ -349,7 +365,7 @@ def main():
     nodes_arr = create_dependence_graph(dummy)
 
     # Get roots
-    root_set = get_roots(nodes_arr)
+    root_set, leaf_set = get_roots_and_leaves(nodes_arr)
     
     # ASSIGN PRIORITIES
     assign_priorities(nodes_arr, root_set)
@@ -358,7 +374,7 @@ def main():
     write_graphviz(nodes_arr)
 
     # SCHEDULE
-    schedule(root_set)
+    schedule(leaf_set)
 
 if __name__ == "__main__": # if called by the command line, execute parse()
     main()
