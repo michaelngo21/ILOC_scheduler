@@ -114,15 +114,16 @@ def create_dependence_graph(dummy: lab1.IR_Node):
         # if len(prev_stores) > last_store_idx and data_edge_nodes[-1] 
         # while len(prev_stores) > last_store_idx and data_edge_node[] == prev_stores[last_store_idx]:
         #     last_store_idx -= 1
+
         nondata_prev_stores = [node for node in prev_stores if node not in data_edge_nodes]
-        if len(nondata_prev_stores) != len(prev_stores):
-            print("//data store removed!")
+        # if len(nondata_prev_stores) != len(prev_stores):
+            # print("//data store removed!")
         nondata_prev_loads = [node for node in prev_loads if node not in data_edge_nodes]
-        if len(nondata_prev_loads) != len(prev_loads):
-            print("//data load removed!")
+        # if len(nondata_prev_loads) != len(prev_loads):
+            # print("//data load removed!")
         nondata_prev_outputs = [node for node in prev_outputs if node not in data_edge_nodes]
-        if len(nondata_prev_outputs) != len(prev_outputs):
-            print("//data output removed!")
+        # if len(nondata_prev_outputs) != len(prev_outputs):
+            # print("//data output removed!")
 
         # set up a list comprehension containing just the GraphNodes at the end of edges to use "in" operation
         # edge_nodes = [edge[0] for edge in node.edges]
@@ -371,7 +372,7 @@ def main():
     assign_priorities(nodes_arr, root_set)
 
     # Construct .dot file for graphviz
-    write_graphviz(nodes_arr)
+    # write_graphviz(nodes_arr)
 
     # SCHEDULE
     schedule(leaf_set)
