@@ -219,35 +219,43 @@ def schedule(leaf_set):
 
     while len(ready) > 0 or len(active) > 0:
         # pick an operation for each functional unit
-        node1 = nop_graph_node
-        node2 = nop_graph_node
+        node1 = None
+        node2 = None
         if len(ready) >= 1:
             node1_idx = 0
             node1 = ready[node1_idx]
             while node1.ir_node.opcode not in FUNC0_ALLOWED:
+                # print("1st while iteration")
                 node1_idx += 1
                 if node1_idx >= len(ready):
                     # print("entered base case about to break")
                     node1 = nop_graph_node
                     break
                 node1 = ready[node1_idx]
-            if node1 != nop_graph_node:
+            if node1 != None:
                 ready.pop(node1_idx)
+            if node1 == None:
+                node1 == nop_graph_node
 
         extra_restrictions = set()  # use extra_restrictions to guarantee that if node1 is output, node2 isn't
         if node1.ir_node.opcode == lab1.OUTPUT_LEX:
             extra_restrictions.add(lab1.OUTPUT_LEX)
+
         if len(ready) >= 1:
             node2_idx = 0
             node2 = ready[node2_idx]
+            
             while node2.ir_node.opcode not in FUNC1_ALLOWED and node2.ir_node.opcode not in extra_restrictions:
+                # print("2nd while iteration")
                 node2_idx += 1
                 if node2_idx >= len(ready):
                     node2 = nop_graph_node
                     break
                 node2 = ready[node2_idx]
-            if node2 != nop_graph_node:
+            if node2 != None:
                 ready.pop(node2_idx)
+            if node2 == None:
+                node2 == nop_graph_node
         
         # move them from ready to active
         node1.cycleToRetire = cycle + LEX_TO_LATENCY[node1.ir_node.opcode]
@@ -274,12 +282,22 @@ def schedule(leaf_set):
                     # TODO: look into this some more
                     # print(f"child.out_edges: {child.out_edges}")
 
-                    # ensure that node is still in out_edges before removing to avoid exception
-                    for out_edge_idx in range(len(parent.out_edges)):
-                        if node == parent.out_edges[out_edge_idx][0]: 
-                            # print(f"node found in out_edges")
-                            parent.out_edges.pop(out_edge_idx)
-                            break
+                    # print("parent.out_edges:", parent.out_edges)
+                    # print(f"node: {node}, edge[1]: {edge[1]}")
+                    # if (edge[1] != SERIALIZATION):  # serialization edges have been removed by early release
+                    if len(edge) == 2:
+                        parent.out_edges.remove((node, edge[1]))
+                    if len(edge) > 2:
+                        parent.out_edges.remove((node, edge[1], edge[2]))
+
+                    # # ensure that node is still in out_edges before removing to avoid exception
+                    # for out_edge_idx in range(len(parent.out_edges)):
+                    #     if node == parent.out_edges[out_edge_idx][0]: 
+                    #         # print(f"node found in out_edges")
+                    #         parent.out_edges.pop(out_edge_idx)
+                    #         break
+                    
+
 
                     # insert the node into ready list (while maintaining ordering)
                     if len(parent.out_edges) == 0:
@@ -290,24 +308,24 @@ def schedule(leaf_set):
         for node in retire_set:
             active.remove(node)
         
-        # for each multi-cycle operation in Active, check ops that depend on o for early releases
-        for node in active:
-            for edge in node.in_edges:
-                parent = edge[0]
-                if edge[1] == SERIALIZATION:
-                    # print(f"parent.out_edges: {parent.out_edges}")
+        # # for each multi-cycle operation in Active, check ops that depend on o for early releases
+        # for node in active:
+        #     for edge in node.in_edges:
+        #         parent = edge[0]
+        #         if edge[1] == SERIALIZATION:
+        #             # print(f"parent.out_edges: {parent.out_edges}")
 
-                    # ensure that node is still in out_edges before removing to avoid exception
-                    for out_edge_idx in range(len(parent.out_edges)):
-                        if node == parent.out_edges[out_edge_idx][0]: 
-                            # print(f"node found in out_edges")
-                            parent.out_edges.pop(out_edge_idx)
-                            break
+        #             # ensure that node is still in out_edges before removing to avoid exception
+        #             for out_edge_idx in range(len(parent.out_edges)):
+        #                 if node == parent.out_edges[out_edge_idx][0]: 
+        #                     # print(f"node found in out_edges")
+        #                     parent.out_edges.pop(out_edge_idx)
+        #                     break
 
-                    if len(parent.out_edges) == 0:
-                        parent.status = READY
-                        insertNode(ready, parent)
-                # don't think we have to account for CONFLICT because you still have to wait until parent retires
+        #             if len(parent.out_edges) == 0:
+        #                 parent.status = READY
+        #                 insertNode(ready, parent)
+        #         # don't think we have to account for CONFLICT because you still have to wait until parent retires
         # print("len(ready):", len(ready))
         
 
@@ -365,7 +383,7 @@ def main():
     # CREATE DEPENDENCE GRAPH
     nodes_arr = create_dependence_graph(dummy)
 
-    # Get roots
+    # Get roots and leaves
     root_set, leaf_set = get_roots_and_leaves(nodes_arr)
     
     # ASSIGN PRIORITIES
