@@ -1,6 +1,7 @@
 import lab1
 import lab2
 import sys
+import time
 
 # TODO: update help message before submitting
 helpMessage = """
@@ -67,9 +68,12 @@ class GraphNode:
 def create_dependence_graph(dummy: lab1.IR_Node):
     def_location = {}
     nodes_arr = []
-    prev_stores = []
-    prev_outputs = []
-    prev_loads = []
+    # prev_stores = []
+    # prev_outputs = []
+    # prev_loads = []
+    prev_store = None
+    prev_output = None
+    prev_load = None
 
     curr = dummy.next
     while curr != dummy:
@@ -115,37 +119,37 @@ def create_dependence_graph(dummy: lab1.IR_Node):
         # while len(prev_stores) > last_store_idx and data_edge_node[] == prev_stores[last_store_idx]:
         #     last_store_idx -= 1
 
-        nondata_prev_stores = [node for node in prev_stores if node not in data_edge_nodes]
-        # if len(nondata_prev_stores) != len(prev_stores):
-            # print("//data store removed!")
-        nondata_prev_loads = [node for node in prev_loads if node not in data_edge_nodes]
-        # if len(nondata_prev_loads) != len(prev_loads):
-            # print("//data load removed!")
-        nondata_prev_outputs = [node for node in prev_outputs if node not in data_edge_nodes]
-        # if len(nondata_prev_outputs) != len(prev_outputs):
-            # print("//data output removed!")
+        # nondata_prev_stores = [node for node in prev_stores if node not in data_edge_nodes]
+        # # if len(nondata_prev_stores) != len(prev_stores):
+        #     # print("//data store removed!")
+        # nondata_prev_loads = [node for node in prev_loads if node not in data_edge_nodes]
+        # # if len(nondata_prev_loads) != len(prev_loads):
+        #     # print("//data load removed!")
+        # nondata_prev_outputs = [node for node in prev_outputs if node not in data_edge_nodes]
+        # # if len(nondata_prev_outputs) != len(prev_outputs):
+        #     # print("//data output removed!")
 
         # set up a list comprehension containing just the GraphNodes at the end of edges to use "in" operation
         # edge_nodes = [edge[0] for edge in node.edges]
 
         # if o is a load, store, or output, add serial and conflict edges to other memory ops
         if curr.opcode == lab1.LOAD_LEX:                    # load needs conflict edge to most recent store
-            if nondata_prev_stores: # add extra check to confirm there isn't already a DATA edge to that node
-                node.add_edge(nondata_prev_stores[-1], CONFLICT)  
-            prev_loads.append(node)
-            if len(prev_loads) > 3:
-                prev_loads.pop(0)
+            if prev_store != None: # add extra check to confirm there isn't already a DATA edge to that node
+                node.add_edge(prev_store, CONFLICT)  
+            prev_load = node
+            # if len(prev_loads) > 3:
+            #     prev_loads.pop(0)
         elif curr.opcode == lab1.OUTPUT_LEX:                # output needs conflict edge to recent store + serialization edge to recent output
-            if nondata_prev_stores:
-                node.add_edge(nondata_prev_stores[-1], CONFLICT)
-            if nondata_prev_outputs:
-                node.add_edge(nondata_prev_outputs[-1], SERIALIZATION)
-            prev_outputs.append(node)
-            if len(prev_outputs) > 3:
-                prev_outputs.pop(0)
+            if prev_store != None:
+                node.add_edge(prev_store, CONFLICT)
+            if prev_output != None:
+                node.add_edge(prev_output, SERIALIZATION)
+            prev_output = node
+            # if len(prev_outputs) > 3:
+            #     prev_outputs.pop(0)
         elif curr.opcode == lab1.STORE_LEX:                 # store needs serialization edge to most recent store, load, & output
             # print(f"entered store for curr={curr.lineno}: last_load={prev_loads.ir_node.lineno}")
-            if nondata_prev_loads:
+            if prev_load != None:
                 # temp code
                 # print(f"adding serialization edge from {node.ir_node.lineno} to {prev_loads.ir_node.lineno}")
                 # print(f"node's edges:")
@@ -153,14 +157,14 @@ def create_dependence_graph(dummy: lab1.IR_Node):
                 #     print(edge[0].ir_node.lineno)
                 # print(f"last_load({prev_loads.ir_node.lineno}) in node.edges = {prev_loads in node.edges}")
                 # temp code
-                node.add_edge(nondata_prev_loads[-1], SERIALIZATION)
-            if nondata_prev_outputs:
-                node.add_edge(nondata_prev_outputs[-1], SERIALIZATION)
-            if nondata_prev_stores:
-                node.add_edge(nondata_prev_stores[-1], SERIALIZATION)
-            prev_stores.append(node)
-            if len(prev_stores) > 3:
-                prev_stores.pop(0)
+                node.add_edge(prev_load, SERIALIZATION)
+            if prev_output != None:
+                node.add_edge(prev_output, SERIALIZATION)
+            if prev_store != None:
+                node.add_edge(prev_store, SERIALIZATION)
+            prev_store = node
+            # if len(prev_stores) > 3:
+            #     prev_stores.pop(0)
         
         curr = curr.next
     
@@ -177,9 +181,9 @@ def get_roots_and_leaves(nodes_arr):
     return root_set, leaf_set
 
 def assign_priorities(nodes_arr, root_set):
-    # num_while_iterations = 0
+    num_while_iterations = 0
     while True:
-        # num_while_iterations += 1
+        num_while_iterations += 1
         reached_fixed_point = True
         for node in nodes_arr:
             for edge in node.out_edges:
@@ -195,7 +199,7 @@ def assign_priorities(nodes_arr, root_set):
                     reached_fixed_point = False
         if reached_fixed_point:
             break
-        # print(f"num_while_iterations {num_while_iterations}")
+    print(f"num_while_iterations {num_while_iterations}")
 
 # helper function for inserting node into a list of nodes that's currently sorted in descending order of priorities
 def insertNode(ready, node):
@@ -225,17 +229,18 @@ def schedule(leaf_set):
             node1_idx = 0
             node1 = ready[node1_idx]
             while node1.ir_node.opcode not in FUNC0_ALLOWED:
-                # print("1st while iteration")
+                # print(f"node1_idx: {node1_idx}")
                 node1_idx += 1
                 if node1_idx >= len(ready):
                     # print("entered base case about to break")
-                    node1 = nop_graph_node
+                    node1 = None
                     break
                 node1 = ready[node1_idx]
             if node1 != None:
+                # print(f"node1: {node1}")
                 ready.pop(node1_idx)
-            if node1 == None:
-                node1 == nop_graph_node
+        if node1 == None:
+            node1 = nop_graph_node
 
         extra_restrictions = set()  # use extra_restrictions to guarantee that if node1 is output, node2 isn't
         if node1.ir_node.opcode == lab1.OUTPUT_LEX:
@@ -246,16 +251,16 @@ def schedule(leaf_set):
             node2 = ready[node2_idx]
             
             while node2.ir_node.opcode not in FUNC1_ALLOWED and node2.ir_node.opcode not in extra_restrictions:
-                # print("2nd while iteration")
+                # print(f"node2_idx: {node2_idx}")
                 node2_idx += 1
                 if node2_idx >= len(ready):
-                    node2 = nop_graph_node
+                    node2 = None
                     break
                 node2 = ready[node2_idx]
             if node2 != None:
                 ready.pop(node2_idx)
-            if node2 == None:
-                node2 == nop_graph_node
+        if node2 == None:
+            node2 = nop_graph_node
         
         # move them from ready to active
         node1.cycleToRetire = cycle + LEX_TO_LATENCY[node1.ir_node.opcode]
@@ -375,25 +380,43 @@ def main():
 
     # PARSE
     # if filename can't be opened, lab1 will print error message and exit cleanly
+    tic = time.perf_counter()
     dummy, maxSR = lab1.parse(["lab1.py", filename]) # dummy is the head of the linked list 
+    toc = time.perf_counter()
+    print(f"Parse took {toc - tic:0.4f} seconds")
 
     # RENAME
+    tic = time.perf_counter()
     maxLive, maxVR = lab2.rename(dummy, maxSR)
+    toc = time.perf_counter()
+    print(f"Rename took {toc - tic:0.4f} seconds")
 
     # CREATE DEPENDENCE GRAPH
+    tic = time.perf_counter()
     nodes_arr = create_dependence_graph(dummy)
+    toc = time.perf_counter()
+    print(f"Creating dependence graph took {toc - tic:0.4f} seconds")
 
     # Get roots and leaves
+    tic = time.perf_counter()
     root_set, leaf_set = get_roots_and_leaves(nodes_arr)
+    toc = time.perf_counter()
+    print(f"Getting roots nad leaves took {toc - tic:0.4f} seconds")
     
     # ASSIGN PRIORITIES
+    tic = time.perf_counter()
     assign_priorities(nodes_arr, root_set)
+    toc = time.perf_counter()
+    print(f"Assigning priorities took {toc - tic:0.4f} seconds")
 
     # Construct .dot file for graphviz
     # write_graphviz(nodes_arr)
 
     # SCHEDULE
+    tic = time.perf_counter()
     schedule(leaf_set)
+    toc = time.perf_counter()
+    print(f"Scheduling took {toc - tic:0.4f} seconds")
 
 if __name__ == "__main__": # if called by the command line, execute parse()
     main()
