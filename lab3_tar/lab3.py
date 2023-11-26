@@ -181,25 +181,24 @@ def get_roots_and_leaves(nodes_arr):
     return root_set, leaf_set
 
 def assign_priorities(nodes_arr, root_set):
-    num_while_iterations = 0
-    while True:
-        num_while_iterations += 1
-        reached_fixed_point = True
-        for node in nodes_arr:
-            for edge in node.out_edges:
-                child = edge[0]
-                child_prio = LEX_TO_LATENCY[child.ir_node.opcode]
+    for root in root_set:
+        assign_priorities_helper(root)
 
-                child_prio *= 10    # Multiply latency weight by 10
-                child_prio += 1     # Account for 1 more descendant along this path
-                child_prio += node.prio # Add parent weight
+def assign_priorities_helper(curr):
+    for edge in curr.out_edges:
+        child = edge[0]
+        child_prio = LEX_TO_LATENCY[child.ir_node.opcode]
 
-                if child_prio > child.prio:
-                    child.prio = child_prio
-                    reached_fixed_point = False
-        if reached_fixed_point:
-            break
-    print(f"num_while_iterations {num_while_iterations}")
+        child_prio *= 10    # Multiply latency weight by 10
+        child_prio += len(child.out_edges)  # Add number of descendants
+        child_prio += curr.prio # Add parent weight
+
+        if child_prio > child.prio:
+            child.prio = child_prio
+            assign_priorities_helper(child)
+            return True
+        else:
+            False
 
 # helper function for inserting node into a list of nodes that's currently sorted in descending order of priorities
 def insertNode(ready, node):
@@ -380,43 +379,43 @@ def main():
 
     # PARSE
     # if filename can't be opened, lab1 will print error message and exit cleanly
-    tic = time.perf_counter()
+    # tic = time.perf_counter()
     dummy, maxSR = lab1.parse(["lab1.py", filename]) # dummy is the head of the linked list 
-    toc = time.perf_counter()
-    print(f"Parse took {toc - tic:0.4f} seconds")
+    # toc = time.perf_counter()
+    # print(f"Parse took {toc - tic:0.4f} seconds")
 
     # RENAME
-    tic = time.perf_counter()
+    # tic = time.perf_counter()
     maxLive, maxVR = lab2.rename(dummy, maxSR)
-    toc = time.perf_counter()
-    print(f"Rename took {toc - tic:0.4f} seconds")
+    # toc = time.perf_counter()
+    # print(f"Rename took {toc - tic:0.4f} seconds")
 
     # CREATE DEPENDENCE GRAPH
-    tic = time.perf_counter()
+    # tic = time.perf_counter()
     nodes_arr = create_dependence_graph(dummy)
-    toc = time.perf_counter()
-    print(f"Creating dependence graph took {toc - tic:0.4f} seconds")
+    # toc = time.perf_counter()
+    # print(f"Creating dependence graph took {toc - tic:0.4f} seconds")
 
     # Get roots and leaves
-    tic = time.perf_counter()
+    # tic = time.perf_counter()
     root_set, leaf_set = get_roots_and_leaves(nodes_arr)
-    toc = time.perf_counter()
-    print(f"Getting roots nad leaves took {toc - tic:0.4f} seconds")
+    # toc = time.perf_counter()
+    # print(f"Getting roots and leaves took {toc - tic:0.4f} seconds")
     
     # ASSIGN PRIORITIES
-    tic = time.perf_counter()
+    # tic = time.perf_counter()
     assign_priorities(nodes_arr, root_set)
-    toc = time.perf_counter()
-    print(f"Assigning priorities took {toc - tic:0.4f} seconds")
+    # toc = time.perf_counter()
+    # print(f"Assigning priorities took {toc - tic:0.4f} seconds")
 
     # Construct .dot file for graphviz
     # write_graphviz(nodes_arr)
 
     # SCHEDULE
-    tic = time.perf_counter()
+    # tic = time.perf_counter()
     schedule(leaf_set)
-    toc = time.perf_counter()
-    print(f"Scheduling took {toc - tic:0.4f} seconds")
+    # toc = time.perf_counter()
+    # print(f"Scheduling took {toc - tic:0.4f} seconds")
 
 if __name__ == "__main__": # if called by the command line, execute parse()
     main()
